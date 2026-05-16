@@ -1,4 +1,3 @@
-/// src/ecc/curve.rs
 use crate::ecc::field::{FieldElement, Pow};
 use crate::ecc::scalar::Scalar;
 use num_bigint::BigUint;
@@ -8,39 +7,24 @@ use std::ops::{Add, Mul};
 pub struct Point {
     x: Option<FieldElement>,
     y: Option<FieldElement>,
-    a: FieldElement,
-    b: FieldElement,
 }
 
 impl Point {
-    pub fn new(
-        x: Option<FieldElement>,
-        y: Option<FieldElement>,
-        a: FieldElement,
-        b: FieldElement,
-    ) -> Self {
+    pub fn new(x: Option<FieldElement>, y: Option<FieldElement>) -> Self {
         match (x, y) {
             (Some(x), Some(y)) => {
                 let x_cubed = x.pow(BigUint::from(3u32));
-                let ax = &a * &x;
-                let right_side = &(&x_cubed + &ax) + &b;
+                let right_side = &x_cubed + FieldElement::secp256k1_fe_b();
                 let y_squared = y.pow(BigUint::from(2u32));
                 if y_squared != right_side {
-                    panic!("({x:?}, {y:?}) is not on the curve")
+                    panic!("is not on the secp256k1 curve")
                 }
                 Self {
                     x: Some(x),
                     y: Some(y),
-                    a,
-                    b,
                 }
             }
-            (None, None) => Self {
-                x: None,
-                y: None,
-                a,
-                b,
-            },
+            (None, None) => Self { x: None, y: None },
             _ => {
                 panic!("Invalid parameters to Point::new()")
             }
@@ -56,35 +40,25 @@ impl Point {
     }
 
     pub fn a(&self) -> &FieldElement {
-        &self.a
+        FieldElement::secp256k1_fe_a()
     }
 
     pub fn b(&self) -> &FieldElement {
-        &self.b
+        FieldElement::secp256k1_fe_b()
     }
 
     // Returns the point at infinity
-    pub fn infinity(a: FieldElement, b: FieldElement) -> Point {
-        Self {
-            x: None,
-            y: None,
-            a,
-            b,
-        }
+    pub fn infinity() -> Point {
+        Self { x: None, y: None }
     }
 
     // Returns the point at infinity with same curve parameters
     pub fn new_infinity(&self) -> Point {
-        Self {
-            x: None,
-            y: None,
-            a: self.a.clone(),
-            b: self.b.clone(),
-        }
+        Self::infinity()
     }
 
     pub fn is_infinity(&self) -> bool {
-        self.x.is_none() && self.y.is_none()
+        self.x().is_none() && self.y().is_none()
     }
 
     // Scalar multiplication using the Scalar type
@@ -102,6 +76,13 @@ impl Point {
             _ => false,
         }
     }
+
+    pub fn generator() -> Point {
+        Point {
+            x: Some(FieldElement::secp256k1_fe_gx().clone()),
+            y: Some(FieldElement::secp256k1_fe_gy().clone()),
+        }
+    }
 }
 
 impl PartialEq for Point {
@@ -116,7 +97,7 @@ impl PartialEq for Point {
             (None, None) => true,
             _ => false,
         };
-        x_eq && y_eq && self.a == other.a && self.b == other.b
+        x_eq && y_eq
     }
 }
 
@@ -148,16 +129,11 @@ impl Add for &Point {
     type Output = Point;
 
     fn add(self, other: &Point) -> Point {
-        assert!(
-            self.a == other.a && self.b == other.b,
-            "Points {self:?}, {other:?} are not on the same curve."
-        );
-
         match (self.x(), self.y(), other.x(), other.y()) {
             (Some(x1), Some(y1), Some(x2), Some(y2)) => {
                 // Point addition for when p1 == p2 has a diffente formula
                 let (s_num, s_den) = if self == other {
-                    (&(&x1.pow(2u32) * 3u32) + self.a(), y1 * 2u32)
+                    (&x1.pow(2u32) * 3u32, y1 * 2u32)
                 } else {
                     (y1 - y2, x1 - x2)
                 };
@@ -169,7 +145,7 @@ impl Add for &Point {
                     let slope = &s_num / &s_den;
                     let new_x = &(&slope.pow(2) - x1) - x2;
                     let new_y = &(&slope * &(x1 - &new_x)) - y1;
-                    Point::new(Some(new_x), Some(new_y), self.a().clone(), self.b().clone())
+                    Point::new(Some(new_x), Some(new_y))
                 }
             }
             (None, _, _, _) => other.clone(),

@@ -1,65 +1,57 @@
-/// src/ecc/field.rs
+use crate::ecc::constants as consts;
+use crate::ecc::util::extended_gcd_for_inverse;
 use num_bigint::BigUint;
 use std::cmp::Ordering;
 use std::fmt;
 use std::ops::{Add, Div, Mul, Sub};
+use std::sync::OnceLock;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FieldElement {
-    num: BigUint,
-    prime: BigUint,
+    value: BigUint,
 }
 
 impl FieldElement {
-    pub fn new(num: BigUint, prime: BigUint) -> Self {
-        if num >= prime {
-            panic!("num not in range 0 to {}", prime - BigUint::from(1u32));
+    pub fn new(value: BigUint) -> Self {
+        FieldElement {
+            value: value % &*consts::SECP256K1_P,
         }
-        FieldElement { num, prime }
     }
 
-    pub fn zero(prime: BigUint) -> Self {
-        Self::new(BigUint::from(0u32), prime)
+    pub fn zero() -> FieldElement {
+        FieldElement::new(consts::bigint_zero().clone())
     }
-    pub fn one(prime: BigUint) -> Self {
-        Self::new(BigUint::from(1u32), prime)
+
+    pub fn one() -> FieldElement {
+        FieldElement::new(consts::bigint_one().clone())
     }
 
     // Convenience constructor for u64 values
-    pub fn from_u64(num: u64, prime: u64) -> Self {
-        Self::new(BigUint::from(num), BigUint::from(prime))
+    pub fn from_u64(num: u64) -> Self {
+        Self::new(BigUint::from(num))
     }
 
     // Convenience constructor for hex strings
-    pub fn from_hex(num_hex: &str, prime_hex: &str) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn from_hex(num_hex: &str) -> Result<FieldElement, Box<dyn std::error::Error>> {
         let num =
             BigUint::parse_bytes(num_hex.as_bytes(), 16).ok_or("Invalid hex string for num")?;
-        let prime =
-            BigUint::parse_bytes(prime_hex.as_bytes(), 16).ok_or("Invalid hex string for prime")?;
-        Ok(Self::new(num, prime))
+        Ok(Self::new(num))
     }
 
     // Convenience constructor for bytes (big-endian)
-    pub fn from_bytes(num_bytes: &[u8], prime_bytes: &[u8]) -> Self {
+    pub fn from_bytes(num_bytes: &[u8]) -> FieldElement {
         let num = BigUint::from_bytes_be(num_bytes);
-        let prime = BigUint::from_bytes_be(prime_bytes);
-        Self::new(num, prime)
-    }
-
-    // Convenience constructor for creating from num bytes with known prime
-    pub fn from_num_bytes(num_bytes: &[u8], prime: BigUint) -> Self {
-        let num = BigUint::from_bytes_be(num_bytes);
-        Self::new(num, prime)
+        Self::new(num)
     }
 
     // Convert the field element's num to bytes (big-endian)
     pub fn to_bytes(&self) -> Vec<u8> {
-        self.num.to_bytes_be()
+        self.value.to_bytes_be()
     }
 
     // Convert the field element's num to bytes with fixed length (big-endian, zero-padded)
     pub fn to_bytes_fixed(&self, len: usize) -> Vec<u8> {
-        let mut bytes = self.num.to_bytes_be();
+        let mut bytes = self.value.to_bytes_be();
         match bytes.len().cmp(&len) {
             Ordering::Less => {
                 let mut padded = vec![0u8; len - bytes.len()];
@@ -74,43 +66,93 @@ impl FieldElement {
         }
     }
 
-    // Convert both num and prime to bytes
-    pub fn to_bytes_with_prime(&self) -> (Vec<u8>, Vec<u8>) {
-        (self.num.to_bytes_be(), self.prime.to_bytes_be())
-    }
+    pub fn inverse(&self) -> Option<Self> {
+        if self.value == BigUint::from(0u32) {
+            return None;
+        }
 
-    pub fn inverse(&self) -> Self {
-        // Fermat's Little Theorem: a^(p-1) ≡ 1 (mod p), so a^(p-2) is the inverse
-        self.pow(&self.prime - BigUint::from(2u32))
+        // Extended Euclidean Algorithm for modular inverse
+        let (gcd, x) = extended_gcd_for_inverse(self.value(), self.prime());
+
+        if gcd != BigUint::from(1u32) {
+            return None; // No inverse exists
+        }
+
+        Some(Self::new(x))
     }
 
     pub fn is_zero(&self) -> bool {
-        self.num == BigUint::from(0u32)
+        self.value == BigUint::from(0u32)
     }
 
-    pub fn num(&self) -> &BigUint {
-        &self.num
+    pub fn value(&self) -> &BigUint {
+        &self.value
     }
 
     pub fn prime(&self) -> &BigUint {
-        &self.prime
+        &*consts::SECP256K1_P
     }
 
     pub fn sqrt(&self) -> Self {
-        let exp = (&self.prime + BigUint::from(1u32)) / BigUint::from(4u32);
-        let result = self.num.modpow(&exp, &self.prime);
-        Self::new(result, self.prime.clone())
+        //x((p+1)/4)
+        let exp = (self.prime() + consts::bigint_one()) / BigUint::from(4u32);
+        let result = self.value().modpow(&exp, self.prime());
+        Self::new(result)
+    }
+
+    pub fn secp256k1_fe_a() -> &'static FieldElement {
+        static SECP256K1_FE_A: OnceLock<FieldElement> = OnceLock::new();
+        SECP256K1_FE_A.get_or_init(|| FieldElement::new(consts::SECP256K1_A.clone()))
+    }
+
+    pub fn secp256k1_fe_b() -> &'static FieldElement {
+        static SECP256K1_FE_B: OnceLock<FieldElement> = OnceLock::new();
+        SECP256K1_FE_B.get_or_init(|| FieldElement::new(consts::SECP256K1_B.clone()))
+    }
+
+    pub fn secp256k1_fe_gx() -> &'static FieldElement {
+        static SECP256K1_FE_GX: OnceLock<FieldElement> = OnceLock::new();
+        SECP256K1_FE_GX.get_or_init(|| FieldElement::new(consts::SECP256K1_GX.clone()))
+    }
+
+    pub fn secp256k1_fe_gy() -> &'static FieldElement {
+        static SECP256K1_FE_GY: OnceLock<FieldElement> = OnceLock::new();
+        SECP256K1_FE_GY.get_or_init(|| FieldElement::new(consts::SECP256K1_GY.clone()))
+    }
+}
+
+impl PartialEq<FieldElement> for &FieldElement {
+    fn eq(&self, other: &FieldElement) -> bool {
+        self.eq(&other)
     }
 }
 
 impl fmt::Display for FieldElement {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "FieldElement_num_{}_prime_{}",
-            self.num.to_str_radix(16),
-            self.prime.to_str_radix(16)
-        )
+        write!(f, "FieldElement_{}", self.value().to_str_radix(16),)
+    }
+}
+impl Add for FieldElement {
+    type Output = FieldElement;
+
+    fn add(self, other: FieldElement) -> FieldElement {
+        &self + &other
+    }
+}
+
+impl Add<&FieldElement> for FieldElement {
+    type Output = FieldElement;
+
+    fn add(self, other: &FieldElement) -> FieldElement {
+        &self + other
+    }
+}
+
+impl Add<FieldElement> for &FieldElement {
+    type Output = FieldElement;
+
+    fn add(self, other: FieldElement) -> FieldElement {
+        self + &other
     }
 }
 
@@ -119,14 +161,36 @@ impl Add for &FieldElement {
 
     fn add(self, other: Self) -> FieldElement {
         assert_eq!(
-            self.prime, other.prime,
+            self.prime(),
+            other.prime(),
             "Cannot add two numbers in different fields"
         );
-        let num = (&self.num + &other.num) % &self.prime;
-        FieldElement {
-            num,
-            prime: self.prime.clone(),
-        }
+        let value = (&self.value + &other.value) % self.prime();
+        FieldElement { value }
+    }
+}
+
+impl Sub for FieldElement {
+    type Output = FieldElement;
+
+    fn sub(self, other: FieldElement) -> FieldElement {
+        &self - &other
+    }
+}
+
+impl Sub<&FieldElement> for FieldElement {
+    type Output = FieldElement;
+
+    fn sub(self, other: &FieldElement) -> FieldElement {
+        &self - other
+    }
+}
+
+impl Sub<FieldElement> for &FieldElement {
+    type Output = FieldElement;
+
+    fn sub(self, other: FieldElement) -> FieldElement {
+        self - &other
     }
 }
 
@@ -135,18 +199,40 @@ impl Sub for &FieldElement {
 
     fn sub(self, rhs: Self) -> FieldElement {
         assert_eq!(
-            self.prime, rhs.prime,
+            self.prime(),
+            rhs.prime(),
             "Cannot subtract two numbers in different fields"
         );
-        let rs = if self.num >= rhs.num {
-            (&self.num - &rhs.num) % &self.prime
+        let value = if self.value >= rhs.value {
+            (self.value() - rhs.value()) % self.prime()
         } else {
-            (&self.prime + &self.num - &rhs.num) % &self.prime
+            (self.prime() + self.value() - rhs.value()) % self.prime()
         };
-        FieldElement {
-            num: rs,
-            prime: self.prime.clone(),
-        }
+        FieldElement { value }
+    }
+}
+
+impl Mul for FieldElement {
+    type Output = FieldElement;
+
+    fn mul(self, other: FieldElement) -> FieldElement {
+        &self * &other
+    }
+}
+
+impl Mul<&FieldElement> for FieldElement {
+    type Output = FieldElement;
+
+    fn mul(self, other: &FieldElement) -> FieldElement {
+        &self * other
+    }
+}
+
+impl Mul<FieldElement> for &FieldElement {
+    type Output = FieldElement;
+
+    fn mul(self, other: FieldElement) -> FieldElement {
+        self * &other
     }
 }
 
@@ -155,14 +241,12 @@ impl Mul for &FieldElement {
 
     fn mul(self, rhs: Self) -> FieldElement {
         assert_eq!(
-            self.prime, rhs.prime,
+            self.prime(),
+            rhs.prime(),
             "Cannot multiply two numbers in different fields"
         );
-        let rs = (self.num() * rhs.num()) % self.prime();
-        FieldElement {
-            num: rs,
-            prime: self.prime().clone(),
-        }
+        let value = (self.value() * rhs.value()) % self.prime();
+        FieldElement { value }
     }
 }
 
@@ -170,11 +254,16 @@ impl Mul<u32> for &FieldElement {
     type Output = FieldElement;
 
     fn mul(self, rhs: u32) -> FieldElement {
-        let rs = (self.num() * BigUint::from(rhs)) % self.prime();
-        FieldElement {
-            num: rs,
-            prime: self.prime().clone(),
-        }
+        let value = (self.value() * BigUint::from(rhs)) % self.prime();
+        FieldElement { value }
+    }
+}
+
+impl Mul<u32> for FieldElement {
+    type Output = FieldElement;
+
+    fn mul(self, rhs: u32) -> FieldElement {
+        &self * rhs
     }
 }
 
@@ -182,18 +271,29 @@ impl Div for &FieldElement {
     type Output = FieldElement;
 
     fn div(self, rhs: &FieldElement) -> FieldElement {
-        assert!(!rhs.is_zero(), "Zero is an invalid denominator!");
+        assert!(!rhs.is_zero(), "Division by zero");
 
         assert_eq!(
-            self.prime, rhs.prime,
+            self.prime(),
+            rhs.prime(),
             "Cannot divide two numbers in different fields"
         );
 
-        let rs = (self.num() * rhs.inverse().num()) % self.prime();
-        FieldElement {
-            num: rs,
-            prime: self.prime().clone(),
+        match rhs.inverse() {
+            Some(ref rhs_inverse) => {
+                let value = (self.value() * rhs_inverse.value()) % self.prime();
+                FieldElement { value }
+            }
+            None => panic!("Cannot divide by a number that has no inverse!"),
         }
+    }
+}
+
+impl Div for FieldElement {
+    type Output = FieldElement;
+
+    fn div(self, rhs: FieldElement) -> FieldElement {
+        &self / &rhs
     }
 }
 
@@ -206,11 +306,8 @@ impl Pow<&BigUint> for &FieldElement {
     type Output = FieldElement;
 
     fn pow(self, exp: &BigUint) -> FieldElement {
-        let rs = self.num().modpow(exp, self.prime());
-        FieldElement {
-            num: rs,
-            prime: self.prime().clone(),
-        }
+        let value = self.value().modpow(exp, self.prime());
+        FieldElement { value }
     }
 }
 
