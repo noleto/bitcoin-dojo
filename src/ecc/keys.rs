@@ -1,3 +1,5 @@
+use num_bigint::BigUint;
+
 use super::curve::Point;
 use super::scalar::Scalar;
 
@@ -14,6 +16,10 @@ pub struct PublicKey {
 impl PrivateKey {
     pub fn new() -> Self {
         Self::from_scalar(Scalar::random())
+    }
+
+    pub fn new_with_seed(seed: BigUint) -> Self {
+        Self::from_scalar(Scalar::new(seed))
     }
 
     pub fn from_scalar(scalar: Scalar) -> Self {

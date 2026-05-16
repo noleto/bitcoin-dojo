@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 hex = "0.4"
+hmac = "0.12"
 lazy_static = "1.5"
 num-bigint = "0.4"
 rand = "0.10"

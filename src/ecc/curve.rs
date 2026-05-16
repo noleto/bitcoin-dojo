@@ -1,12 +1,24 @@
 use crate::ecc::field::{FieldElement, Pow};
 use crate::ecc::scalar::Scalar;
 use num_bigint::BigUint;
+use std::fmt;
 use std::ops::{Add, Mul};
 
 #[derive(Debug, Clone)]
 pub struct Point {
     x: Option<FieldElement>,
     y: Option<FieldElement>,
+}
+
+impl fmt::Display for Point {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Point(x={},y={})",
+            self.x().as_ref().unwrap(),
+            self.y().as_ref().unwrap()
+        )
+    }
 }
 
 impl Point {
