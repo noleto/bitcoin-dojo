@@ -10,3 +10,7 @@
 
 ## Overall issues
 - field_tests.rs expect subtraction trait implemented for FieldElement, but there is only &FieldElement
+
+
+# Improvements
+- Whenc copying functions frim stubs.rs, instead of just having a commented function body, put `todo!()` so codes compiles and there is no IDE errors

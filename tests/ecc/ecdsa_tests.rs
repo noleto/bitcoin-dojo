@@ -1,4 +1,4 @@
-use bitcoin_dojo::ecc::ecdsa::{Signature, sign, verify};
+use bitcoin_dojo::ecc::ecdsa::{sign, verify, Signature};
 #[cfg(test)]
 use bitcoin_dojo::ecc::keys::PrivateKey;
 use bitcoin_dojo::ecc::scalar::Scalar;
