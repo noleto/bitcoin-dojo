@@ -1,3 +1,4 @@
+use crate::ecc::constants as consts;
 use crate::ecc::field::{FieldElement, Pow};
 use crate::ecc::scalar::Scalar;
 use num_bigint::BigUint;
@@ -8,6 +9,12 @@ use std::ops::{Add, Mul};
 pub struct Point {
     x: Option<FieldElement>,
     y: Option<FieldElement>,
+}
+
+#[derive(PartialEq)]
+pub enum Parity {
+    Even,
+    Odd,
 }
 
 impl fmt::Display for Point {
@@ -41,6 +48,29 @@ impl Point {
                 panic!("Invalid parameters to Point::new()")
             }
         }
+    }
+
+    pub fn new_x_only(x: Option<FieldElement>, expected_parity: Parity) -> Self {
+        let Some(fe_x) = x.as_ref() else {
+            return Self::new(None, None);
+        };
+        let mut actual_y = Self::solve_curve_point(fe_x);
+        // check the last bit of what y we got and see if matches the expected parity
+        let actual_is_odd = actual_y.value().bit(0);
+        let expected_is_odd = expected_parity == Parity::Odd;
+        // Flip y if what we got doesn't match desired parity
+        if actual_is_odd != expected_is_odd {
+            actual_y = FieldElement::new(&*consts::SECP256K1_P - actual_y.value());
+        }
+        Self::new(x, Some(actual_y))
+    }
+
+    // Solve solving the curve equation y^2 = x3 + 7 and returns y
+    fn solve_curve_point(x: &FieldElement) -> FieldElement {
+        let x_cubed = x.pow(BigUint::from(3u32));
+        //# Work out y values using the curve equation y^2 = x^3 + 7
+        let y_squared = &x_cubed + FieldElement::secp256k1_fe_b();
+        y_squared.sqrt()
     }
 
     pub fn x(&self) -> &Option<FieldElement> {

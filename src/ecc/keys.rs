@@ -1,6 +1,8 @@
 use num_bigint::BigUint;
 
-use super::curve::Point;
+use crate::ecc::field::FieldElement;
+
+use super::curve::{Parity, Point};
 use super::scalar::Scalar;
 
 #[derive(Debug, Clone)]
@@ -87,5 +89,57 @@ impl PublicKey {
         sec_bytes.extend(x.to_bytes_fixed(32));
         sec_bytes.extend(y.to_bytes_fixed(32));
         sec_bytes
+    }
+
+    /// Parse a SEC format public key (compressed or uncompressed)
+    /// Compressed format: 33 bytes [0x02/0x03, x_coordinate (32 bytes)]
+    /// Uncompressed format: 65 bytes [0x04, x_coordinate (32 bytes), y_coordinate (32 bytes)]
+    pub fn parse(sec_bytes: &[u8]) -> Result<Self, &'static str> {
+        let bytes_size = sec_bytes.len();
+        if bytes_size == 33 {
+            Self::parse_compressed(sec_bytes)
+        } else if bytes_size == 65 {
+            Self::parse_uncompressed(sec_bytes)
+        } else {
+            Err("Can only parse a compressed (33 bytes) or uncompressed (65 bytes) format.")
+        }
+    }
+
+    /// Parse an uncompressed SEC format public key
+    /// Format: [0x04, x_coordinate (32 bytes), y_coordinate (32 bytes)]
+    fn parse_uncompressed(sec_bytes: &[u8]) -> Result<Self, &'static str> {
+        if sec_bytes.len() != 65 {
+            return Err("Uncompressed SEC format public key should have 65 bytes!");
+        }
+        if sec_bytes[0] != 0x04 {
+            return Err("Uncompressed format must start with 0x04 byte!");
+        }
+        let x = &sec_bytes[1..33];
+        let y = &sec_bytes[33..];
+        Ok(PublicKey {
+            point: Point::new(
+                Some(FieldElement::from_bytes(x)),
+                Some(FieldElement::from_bytes(y)),
+            ),
+        })
+    }
+
+    /// Parse a compressed SEC format public key
+    /// Format: [0x02/0x03, x_coordinate (32 bytes)]
+    fn parse_compressed(sec_bytes: &[u8]) -> Result<Self, &'static str> {
+        if sec_bytes.len() != 33 {
+            return Err("Compressed SEC format public key should have 33 bytes!");
+        }
+
+        let x = Some(FieldElement::from_bytes(&sec_bytes[1..]));
+        let parity = match sec_bytes[0] {
+            0x02 => Parity::Even,
+            0x03 => Parity::Odd,
+            _ => return Err("Compressed format must start with 0x02 or 0x03 byte!"),
+        };
+
+        Ok(PublicKey {
+            point: Point::new_x_only(x, parity),
+        })
     }
 }
