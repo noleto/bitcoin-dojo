@@ -151,6 +151,97 @@ pub fn verify(public_key: &PublicKey, message_hash: &[u8], signature: &Signature
     })
 }
 
+impl Signature {
+    /// Encode the signature in Distinguished Encoding Rules (DER) format
+    ///
+    /// DER format for ECDSA signatures:
+    /// SEQUENCE {
+    ///   r INTEGER,
+    ///   s INTEGER
+    /// }
+    pub fn to_der(&self) -> Vec<u8> {
+        let mut der = Vec::new();
+        der.push(0x30);
+
+        let r_der = self.encode_integer(&self.r);
+        let s_der = self.encode_integer(&self.s);
+
+        der.push(self.encode_length(s_der.len() + r_der.len()));
+
+        der.extend(r_der);
+        der.extend(s_der);
+
+        der
+    }
+
+    /// Parse a DER-encoded signature
+    ///
+    /// Returns None if the DER encoding is invalid
+    pub fn from_der(der_bytes: &[u8]) -> Option<Self> {
+        //Check if matches DER expected lentghts only
+        if !(70..=72).contains(&der_bytes.len()) {
+            return None;
+        }
+
+        if der_bytes[0] != 0x30 {
+            return None;
+        }
+
+        let size_r = der_bytes[3] as usize;
+        let (r, der_r_size) = Self::decode_integer(&der_bytes[2..(2 + 2 + size_r)])?;
+        let (s, _) = Self::decode_integer(&der_bytes[(2 + der_r_size)..])?;
+        Some(Signature { r, s })
+    }
+
+    /// (Optional) helper methods
+
+    /// Encode a scalar as a DER INTEGER
+    fn encode_integer(&self, scalar: &Scalar) -> Vec<u8> {
+        let mut der_int_bytes = Vec::with_capacity(35);
+        der_int_bytes.push(0x02);
+
+        let scalar_bytes = scalar.as_bytes();
+        let needs_padding = scalar_bytes[0] >= 0x80;
+        der_int_bytes.push(self.encode_length(scalar_bytes.len() + needs_padding as usize));
+        if needs_padding {
+            der_int_bytes.push(0x00);
+        }
+        der_int_bytes.extend(scalar_bytes);
+
+        der_int_bytes
+    }
+
+    /// Encode length in DER format
+    fn encode_length(&self, length: usize) -> u8 {
+        assert!(length <= 255, "Cannot encode length greather than 255");
+        let as_bytes = length.to_be_bytes();
+        as_bytes
+            .last()
+            .expect("Cannot encode length as byte representation is empty! ")
+            .clone()
+    }
+
+    /// Decode DER-encoded INTEGER
+    /// 0x02 + length + integer_bytes
+    fn decode_integer(bytes: &[u8]) -> Option<(Scalar, usize)> {
+        if !(34..=35).contains(&bytes.len()) {
+            return None;
+        }
+        if bytes[0] != 0x02 {
+            return None;
+        }
+
+        if !matches!(bytes[1], 0x20..=0x21) {
+            return None;
+        }
+
+        Some((
+            Scalar::new(BigUint::from_bytes_be(&bytes[2..])),
+            bytes.len(),
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -168,7 +259,7 @@ mod tests {
     }
 
     #[test]
-    fn feature() {
+    fn test_verify() {
         //vector test from https://learnmeabitcoin.com/technical/cryptography/elliptic-curve/ecdsa/#verify
         let message_hash = sha256(b"ECDSA is the most fun I have ever experienced");
         let priv_k = PrivateKey::new_with_seed(biguint_from_hex(
@@ -183,5 +274,56 @@ mod tests {
             )),
         };
         assert!(verify(&priv_k.public_key(), &message_hash, &sig))
+    }
+
+    #[test]
+    fn test_der_encoding() {
+        let sig = Signature {
+            r: Scalar::new(
+                BigUint::parse_bytes(
+                    b"4b3c7f0bf30231753bf6ba2d55d7ffe5366d42a0132c96c0be662a84bb089bac",
+                    16,
+                )
+                .expect("Cannot parse into BigUint"),
+            ),
+            s: Scalar::new(
+                BigUint::parse_bytes(
+                    b"309a96c2301de90875910ec90b1927dd2db76209b0fb9f943f44dfe4c52597f7",
+                    16,
+                )
+                .expect("Cannot parse into BigUint"),
+            ),
+        };
+
+        assert_eq!(
+            hex::encode(sig.to_der()),
+            "304402204b3c7f0bf30231753bf6ba2d55d7ffe5366d42a0132c96c0be662a84bb089bac0220309a96c2301de90875910ec90b1927dd2db76209b0fb9f943f44dfe4c52597f7"
+        )
+    }
+
+    #[test]
+    fn test_der_decoding() {
+        let sig = Signature {
+            r: Scalar::new(
+                BigUint::parse_bytes(
+                    b"4b3c7f0bf30231753bf6ba2d55d7ffe5366d42a0132c96c0be662a84bb089bac",
+                    16,
+                )
+                .expect("Cannot parse into BigUint"),
+            ),
+            s: Scalar::new(
+                BigUint::parse_bytes(
+                    b"309a96c2301de90875910ec90b1927dd2db76209b0fb9f943f44dfe4c52597f7",
+                    16,
+                )
+                .expect("Cannot parse into BigUint"),
+            ),
+        };
+
+        let sig_recreated = Signature::from_der(&hex::decode(
+            "304402204b3c7f0bf30231753bf6ba2d55d7ffe5366d42a0132c96c0be662a84bb089bac0220309a96c2301de90875910ec90b1927dd2db76209b0fb9f943f44dfe4c52597f7",
+        ).expect("hex failed to decode"));
+
+        assert_eq!(sig, sig_recreated.expect("Cannot decode"));
     }
 }
