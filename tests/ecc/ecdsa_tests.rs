@@ -1,4 +1,4 @@
-use bitcoin_dojo::ecc::ecdsa::{Signature, sign, verify};
+use bitcoin_dojo::ecc::ecdsa::{sign, verify, Signature};
 #[cfg(test)]
 use bitcoin_dojo::ecc::keys::PrivateKey;
 use bitcoin_dojo::ecc::scalar::Scalar;
@@ -1194,6 +1194,50 @@ fn test_der_encoding_format_compliance() {
         "DER bytes: {:02x?}",
         &der_bytes[..std::cmp::min(20, der_bytes.len())]
     );
+}
+
+fn test_der_roundtrip_multiple_messages() {
+    let private_key = PrivateKey::new();
+    let public_key = private_key.public_key();
+
+    let test_messages = vec![
+        b"short".to_vec(),
+        b"This is a longer message to test DER encoding".to_vec(),
+        vec![0u8; 32],                 // All zeros
+        vec![0xffu8; 32],              // All ones
+        (0..255).collect::<Vec<u8>>(), // Sequential bytes
+    ];
+
+    for (i, message) in test_messages.iter().enumerate() {
+        let message_hash = sha256(message);
+        let signature = sign(&private_key, &message_hash);
+
+        // Encode to DER
+        let der_bytes = signature.to_der();
+
+        // Decode from DER
+        let decoded_signature = Signature::from_der(&der_bytes)
+            .expect(&format!("Failed to decode DER for message {}", i));
+
+        // Verify signatures match
+        assert_eq!(
+            signature.r, decoded_signature.r,
+            "r values should match for message {}",
+            i
+        );
+        assert_eq!(
+            signature.s, decoded_signature.s,
+            "s values should match for message {}",
+            i
+        );
+
+        // Verify signature still validates
+        assert!(
+            verify(&public_key, &message_hash, &decoded_signature),
+            "Decoded signature should verify for message {}",
+            i
+        );
+    }
 }
 
 #[test]
