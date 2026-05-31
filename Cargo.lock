@@ -22,6 +22,7 @@ dependencies = [
  "hmac",
  "lazy_static",
  "num-bigint",
+ "num-traits",
  "rand",
  "ripemd",
  "sha2",
