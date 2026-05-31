@@ -17,4 +17,11 @@ impl Network {
             Network::Testnet | Network::Regtest => 0x6F,
         }
     }
+
+    pub fn wif_version(&self) -> u8 {
+        match self {
+            Network::Mainnet => 0x80,
+            Network::Testnet | Network::Regtest => 0xEF,
+        }
+    }
 }

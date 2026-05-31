@@ -7,5 +7,6 @@ fn main() {
     println!(
         "My pubkey for testnet: {}",
         pub_k.address(AddressType::P2PKH, Network::Testnet)
-    )
+    );
+    println!("WIF format: {}", priv_k.to_wif(Network::Testnet, true))
 }

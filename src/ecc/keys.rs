@@ -40,6 +40,23 @@ impl PrivateKey {
     pub fn scalar(&self) -> &Scalar {
         &self.scalar
     }
+
+    /// Convert private key to Wallet Import Format (WIF)
+    /// WIF is a Base58Check encoded format for Bitcoin private keys
+    /// compressed: if true, indicates the public key should be compressed
+    pub fn to_wif(&self, network: Network, compressed: bool) -> String {
+        let mut buffer = [0u8; 34];
+        //version byte
+        buffer[0] = network.wif_version();
+        // 32 bytes private key
+        buffer[1..33].copy_from_slice(&self.scalar.as_bytes());
+        // 1 byte (optional) for compression byte
+        if compressed {
+            buffer[33] = 0x01;
+        }
+        let len = if compressed { 34 } else { 33 };
+        encode_base58_check(&buffer[..len])
+    }
 }
 
 impl Default for PrivateKey {
