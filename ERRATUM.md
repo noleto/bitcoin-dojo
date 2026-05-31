@@ -14,3 +14,11 @@
 
 # Improvements
 - Whenc copying functions frim stubs.rs, instead of just having a commented function body, put `todo!()` so codes compiles and there is no IDE errors
+
+# 2.6 Addresses
+## Missing imports in `stubs.rs`:
+```
+use crate::utils::address_types::{AddressType, Network};
+
+...
+```

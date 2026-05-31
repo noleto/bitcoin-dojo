@@ -1,9 +1,12 @@
 use num_bigint::BigUint;
 
 use crate::ecc::field::FieldElement;
+use crate::hash160;
+use crate::utils::base58::encode_base58_check;
 
 use super::curve::{Parity, Point};
 use super::scalar::Scalar;
+use crate::utils::address_types::{AddressType, Network};
 
 #[derive(Debug, Clone)]
 pub struct PrivateKey {
@@ -141,5 +144,20 @@ impl PublicKey {
         Ok(PublicKey {
             point: Point::new_x_only(x, parity),
         })
+    }
+
+    /// Generate a Bitcoin address of the specified type
+    pub fn address(&self, address_type: AddressType, network: Network) -> String {
+        match address_type {
+            AddressType::P2PKH => self.p2pkh_address(network),
+        }
+    }
+
+    /// Convenience method for generating P2PKH addresses
+    pub fn p2pkh_address(&self, network: Network) -> String {
+        let mut buffer = [0u8; 21];
+        buffer[0] = network.p2pkh_version();
+        buffer[1..].copy_from_slice(&hash160(&self.sec_compressed()));
+        encode_base58_check(&buffer)
     }
 }

@@ -4,6 +4,10 @@ mod tests {
     use bitcoin_dojo::ecc::keys::{PrivateKey, PublicKey};
     use bitcoin_dojo::ecc::scalar::Scalar;
     use num_bigint::BigUint;
+    use bitcoin_dojo::utils::address_types::{AddressType, Network};
+    use bitcoin_dojo::utils::base58::encode_base58_check;
+    use bitcoin_dojo::hash160;
+    // use bitcoin_dojo::utils::hash160::hash160;
 
     #[test]
     fn test_private_key_new() {
@@ -893,4 +897,224 @@ mod tests {
             panic!("Should return error for invalid compressed prefix");
         }
     }
+
+    #[test]
+    fn test_p2pkh_address_generation() {
+        let scalar_value = BigUint::from(12345u32);
+        let scalar = Scalar::new(scalar_value);
+        let private_key = PrivateKey::from_scalar(scalar);
+        let public_key = private_key.public_key();
+
+        // Test mainnet address
+        let mainnet_address = public_key.p2pkh_address(Network::Mainnet);
+        
+        // Should be a valid Base58 string
+        assert!(!mainnet_address.is_empty());
+        assert!(mainnet_address.chars().all(|c| "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz".contains(c)));
+        
+        // Mainnet P2PKH addresses typically start with '1'
+        assert!(mainnet_address.starts_with('1'));
+        
+        // Should be reasonable length (25-34 characters typically)
+        assert!(mainnet_address.len() >= 25 && mainnet_address.len() <= 34);
+    }
+
+    #[test]
+    fn test_p2pkh_address_testnet() {
+        let scalar_value = BigUint::from(54321u32);
+        let scalar = Scalar::new(scalar_value);
+        let private_key = PrivateKey::from_scalar(scalar);
+        let public_key = private_key.public_key();
+
+        // Test testnet address
+        let testnet_address = public_key.p2pkh_address(Network::Testnet);
+        
+        // Should be a valid Base58 string
+        assert!(!testnet_address.is_empty());
+        
+        // Testnet P2PKH addresses typically start with 'm' or 'n'
+        assert!(testnet_address.starts_with('m') || testnet_address.starts_with('n'));
+        
+        // Should be reasonable length
+        assert!(testnet_address.len() >= 25 && testnet_address.len() <= 34);
+    }
+
+    #[test]
+    fn test_address_method_p2pkh() {
+        let scalar_value = BigUint::from(99999u32);
+        let scalar = Scalar::new(scalar_value);
+        let private_key = PrivateKey::from_scalar(scalar);
+        let public_key = private_key.public_key();
+
+        // Test that address() method with P2PKH type matches p2pkh_address()
+        let address_via_method = public_key.address(AddressType::P2PKH, Network::Mainnet);
+        let address_via_p2pkh = public_key.p2pkh_address(Network::Mainnet);
+        
+        assert_eq!(address_via_method, address_via_p2pkh);
+    }
+
+    #[test]
+    fn test_address_deterministic() {
+        let scalar_value = BigUint::from(777777u32);
+        let scalar = Scalar::new(scalar_value);
+        let private_key = PrivateKey::from_scalar(scalar);
+        let public_key = private_key.public_key();
+
+        // Same public key should always generate the same address
+        let address1 = public_key.p2pkh_address(Network::Mainnet);
+        let address2 = public_key.p2pkh_address(Network::Mainnet);
+        
+        assert_eq!(address1, address2);
+        
+        // Test with address() method as well
+        let address3 = public_key.address(AddressType::P2PKH, Network::Mainnet);
+        assert_eq!(address1, address3);
+    }
+
+    #[test]
+    fn test_different_keys_different_addresses() {
+        let scalar1 = Scalar::new(BigUint::from(111111u32));
+        let scalar2 = Scalar::new(BigUint::from(222222u32));
+        
+        let private_key1 = PrivateKey::from_scalar(scalar1);
+        let private_key2 = PrivateKey::from_scalar(scalar2);
+        
+        let public_key1 = private_key1.public_key();
+        let public_key2 = private_key2.public_key();
+        
+        let address1 = public_key1.p2pkh_address(Network::Mainnet);
+        let address2 = public_key2.p2pkh_address(Network::Mainnet);
+        
+        assert_ne!(address1, address2);
+    }
+
+    #[test]
+    fn test_mainnet_vs_testnet_addresses() {
+        let scalar_value = BigUint::from(888888u32);
+        let scalar = Scalar::new(scalar_value);
+        let private_key = PrivateKey::from_scalar(scalar);
+        let public_key = private_key.public_key();
+
+        let mainnet_address = public_key.p2pkh_address(Network::Mainnet);
+        let testnet_address = public_key.p2pkh_address(Network::Testnet);
+        
+        // Should be different addresses
+        assert_ne!(mainnet_address, testnet_address);
+        
+        // Check prefixes
+        assert!(mainnet_address.starts_with('1'));
+        assert!(testnet_address.starts_with('m') || testnet_address.starts_with('n'));
+    }
+
+    #[test]
+    fn test_address_generator_point() {
+        // Test address generation for the generator point (private key = 1)
+        let scalar_one = Scalar::new(BigUint::from(1u32));
+        let private_key = PrivateKey::from_scalar(scalar_one);
+        let public_key = private_key.public_key();
+
+        let address = public_key.p2pkh_address(Network::Mainnet);
+        
+        // Should be a valid address
+        assert!(!address.is_empty());
+        assert!(address.starts_with('1'));
+        assert!(address.len() >= 25 && address.len() <= 34);
+    }
+
+    #[test]
+    fn test_address_random_keys() {
+        // Test address generation with randomly generated keys
+        for _ in 0..10 {
+            let private_key = PrivateKey::new();
+            let public_key = private_key.public_key();
+
+            let mainnet_address = public_key.p2pkh_address(Network::Mainnet);
+            let testnet_address = public_key.p2pkh_address(Network::Testnet);
+            
+            // Mainnet addresses
+            assert!(!mainnet_address.is_empty());
+            assert!(mainnet_address.starts_with('1'));
+            assert!(mainnet_address.len() >= 25 && mainnet_address.len() <= 34);
+            
+            // Testnet addresses
+            assert!(!testnet_address.is_empty());
+            assert!(testnet_address.starts_with('m') || testnet_address.starts_with('n'));
+            assert!(testnet_address.len() >= 25 && testnet_address.len() <= 34);
+            
+            // Should be different
+            assert_ne!(mainnet_address, testnet_address);
+        }
+    }
+
+    #[test]
+    fn test_address_uses_compressed_pubkey() {
+        // Verify that address generation uses compressed public key format
+        let scalar_value = BigUint::from(123456u32);
+        let scalar = Scalar::new(scalar_value);
+        let private_key = PrivateKey::from_scalar(scalar);
+        let public_key = private_key.public_key();
+
+        // Generate address
+        let address = public_key.p2pkh_address(Network::Mainnet);
+        
+        // Manually create address using compressed SEC format
+        let compressed_sec = public_key.to_sec(true);
+        let hash160_result = hash160(&compressed_sec);
+        let mut versioned_hash = vec![0x00]; // Mainnet P2PKH version
+        versioned_hash.extend_from_slice(&hash160_result);
+        let expected_address = encode_base58_check(&versioned_hash);
+        
+        assert_eq!(address, expected_address);
+    }
+
+    #[test]
+    fn test_address_edge_cases() {
+        // Test with various scalar values to ensure robustness
+        let test_values = [
+            BigUint::from(1u32),
+            BigUint::from(2u32),
+            BigUint::from(u32::MAX),
+            BigUint::parse_bytes(b"123456789abcdef", 16).unwrap(),
+        ];
+
+        for (i, val) in test_values.iter().enumerate() {
+            let scalar = Scalar::new(val.clone());
+            let private_key = PrivateKey::from_scalar(scalar);
+            let public_key = private_key.public_key();
+
+            let mainnet_address = public_key.p2pkh_address(Network::Mainnet);
+            let testnet_address = public_key.p2pkh_address(Network::Testnet);
+            
+            assert!(!mainnet_address.is_empty(), "Mainnet address should not be empty for test case {}", i);
+            assert!(!testnet_address.is_empty(), "Testnet address should not be empty for test case {}", i);
+            assert!(mainnet_address.starts_with('1'), "Mainnet address should start with '1' for test case {}", i);
+            assert!(testnet_address.starts_with('m') || testnet_address.starts_with('n'), 
+                    "Testnet address should start with 'm' or 'n' for test case {}", i);
+        }
+    }
+
+    #[test]
+    fn test_address_consistency_with_sec_format() {
+        // Test that the address generation is consistent with SEC format serialization
+        let test_values = [1u32, 42, 1337, 65537];
+
+        for &val in &test_values {
+            let scalar = Scalar::new(BigUint::from(val));
+            let private_key = PrivateKey::from_scalar(scalar);
+            let public_key = private_key.public_key();
+
+            // Generate address using the method
+            let address = public_key.p2pkh_address(Network::Mainnet);
+            
+            // Generate address manually using SEC format
+            let sec_bytes = public_key.to_sec(true); // Should use compressed
+            let hash160_result = hash160(&sec_bytes);
+            let mut versioned_hash = vec![0x00]; // Mainnet version
+            versioned_hash.extend_from_slice(&hash160_result);
+            let manual_address = encode_base58_check(&versioned_hash);
+            
+            assert_eq!(address, manual_address, "Address should match manual calculation for value {}", val);
+        }
+    }
+
 }
