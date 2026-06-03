@@ -22,3 +22,9 @@ use crate::utils::address_types::{AddressType, Network};
 
 ...
 ```
+
+# 2.8 Variable Length Integers
+## Missing imports in `stubs.rs`:
+```
+use std::io::{Error, Read};
+```
