@@ -10,14 +10,16 @@ pub struct Tx {
     pub version: u32,
     pub tx_ins: Vec<TxInput>,
     pub tx_outs: Vec<TxOutput>,
+    pub locktime: u32,
 }
 
 impl Tx {
-    pub fn new(version: u32, tx_ins: Vec<TxInput>, tx_outs: Vec<TxOutput>) -> Self {
+    pub fn new(version: u32, tx_ins: Vec<TxInput>, tx_outs: Vec<TxOutput>, locktime: u32) -> Self {
         Self {
             version,
             tx_ins,
             tx_outs,
+            locktime,
         }
     }
 
@@ -30,15 +32,19 @@ impl Tx {
         let inputs = Self::parse_compact_list(reader.by_ref(), TxInput::parse)?;
         let outputs = Self::parse_compact_list(reader.by_ref(), TxOutput::parse)?;
 
-        Ok(Self::new(version, inputs, outputs))
+        //locktime
+        reader.read_exact(&mut buffer)?;
+        let locktime = u32::from_le_bytes(buffer);
+
+        Ok(Self::new(version, inputs, outputs, locktime))
     }
 
     pub fn parse_compact_list<R: Read, F, U>(
         reader: &mut R,
-        mut parser: F,
+        parser: F,
     ) -> Result<Vec<U>, Box<dyn Error>>
     where
-        F: FnMut(&mut R) -> Result<U, Box<dyn Error>>,
+        F: Fn(&mut R) -> Result<U, Box<dyn Error>>,
     {
         let count = decode_varint(reader)? as usize;
         (0..count).map(|_| parser(reader)).collect()
