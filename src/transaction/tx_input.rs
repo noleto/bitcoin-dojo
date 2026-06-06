@@ -11,7 +11,7 @@ pub struct TxInput {
 }
 
 impl TxInput {
-    pub fn parse<R: Read>(mut reader: R) -> Result<Self, Box<dyn Error>> {
+    pub fn parse<R: Read>(reader: &mut R) -> Result<Self, Box<dyn Error>> {
         let mut prev_tx_id = [0u8; 32];
         reader.read_exact(&mut prev_tx_id)?;
 
@@ -19,7 +19,7 @@ impl TxInput {
         reader.read_exact(&mut buffer)?;
         let prev_index = u32::from_le_bytes(buffer);
 
-        let script_size = decode_varint(&mut reader)? as usize;
+        let script_size = decode_varint(reader)? as usize;
         let mut script_sig = vec![0u8; script_size];
         reader.read_exact(&mut script_sig)?;
 
