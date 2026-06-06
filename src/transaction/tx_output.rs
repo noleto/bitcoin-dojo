@@ -1,4 +1,4 @@
-use crate::utils::varint::decode_varint;
+use crate::utils::varint::{decode_varint, encode_varint};
 use std::error::Error;
 use std::io::Read;
 
@@ -22,5 +22,22 @@ impl TxOutput {
             amount,
             script_pubkey,
         })
+    }
+
+    pub fn serialize(&self) -> Vec<u8> {
+        let script_pubkey_compact_size = encode_varint(self.script_pubkey.len() as u64);
+        let mut buffer =
+            Vec::with_capacity(8 + script_pubkey_compact_size.len() + self.script_pubkey.len());
+
+        //push amount 8 bytes	Little-Endian
+        buffer.extend(self.amount.to_le_bytes());
+
+        //push ScriptPubKey Size (compact size)
+        buffer.extend(script_pubkey_compact_size);
+
+        //push ScriptPubKey
+        buffer.extend(&self.script_pubkey);
+
+        buffer
     }
 }

@@ -1,4 +1,4 @@
-use crate::utils::varint::decode_varint;
+use crate::utils::varint::{decode_varint, encode_varint};
 use std::error::Error;
 use std::io::Read;
 
@@ -31,5 +31,29 @@ impl TxInput {
             script_sig,
             sequence,
         })
+    }
+
+    pub fn serialize(&self) -> Vec<u8> {
+        let script_sig_compact_size = encode_varint(self.script_sig.len() as u64);
+        let mut buffer = Vec::with_capacity(
+            self.prev_tx_id.len() + script_sig_compact_size.len() + self.script_sig.len() + 8,
+        );
+
+        //push prev_tx_id 32 bytes Little-Endian
+        buffer.extend(&self.prev_tx_id);
+
+        //push prev_index 4 bytes	Little-Endian
+        buffer.extend(self.prev_index.to_le_bytes());
+
+        //push script_sig Compact Size
+        buffer.extend(script_sig_compact_size);
+
+        //push ScriptSig
+        buffer.extend(&self.script_sig);
+
+        //push sequence 4 bytes	Little-Endian
+        buffer.extend(self.sequence.to_le_bytes());
+
+        buffer
     }
 }

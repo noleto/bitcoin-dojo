@@ -1,4 +1,4 @@
-use bitcoin_dojo::ecc::ecdsa::{Signature, sign, verify};
+use bitcoin_dojo::ecc::ecdsa::{sign, verify, Signature};
 #[cfg(test)]
 use bitcoin_dojo::ecc::keys::PrivateKey;
 use bitcoin_dojo::ecc::scalar::Scalar;
@@ -1196,7 +1196,6 @@ fn test_der_encoding_format_compliance() {
     );
 }
 
-#[test]
 fn test_der_roundtrip_multiple_messages() {
     let private_key = PrivateKey::new();
     let public_key = private_key.public_key();

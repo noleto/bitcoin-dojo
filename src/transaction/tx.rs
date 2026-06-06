@@ -2,7 +2,7 @@ use std::io::Read;
 
 use crate::transaction::tx_input::TxInput;
 use crate::transaction::tx_output::TxOutput;
-use crate::utils::varint::decode_varint;
+use crate::utils::varint::{decode_varint, encode_varint};
 use std::error::Error;
 
 #[derive(Clone)]
@@ -21,6 +21,33 @@ impl Tx {
             tx_outs,
             locktime,
         }
+    }
+
+    pub fn serialize(&self) -> Vec<u8> {
+        let mut buffer = Vec::new();
+        //push Version 4 bytes	Little-Endian
+        buffer.extend(self.version.to_le_bytes());
+
+        //push Input Count Compact Size
+        buffer.extend(encode_varint(self.tx_ins.len() as u64));
+
+        //push all inputs
+        for input in &self.tx_ins {
+            buffer.extend(input.serialize());
+        }
+
+        //push Output Count Compact Size
+        buffer.extend(encode_varint(self.tx_outs.len() as u64));
+
+        //push all outputs
+        for output in &self.tx_outs {
+            buffer.extend(output.serialize());
+        }
+
+        //push Locktime 4 bytes	Little-Endian
+        buffer.extend(self.locktime.to_le_bytes());
+
+        buffer
     }
 
     // Parse the first 4 bytes of a transaction and interpret them as a little-endian 32-bit integer.
