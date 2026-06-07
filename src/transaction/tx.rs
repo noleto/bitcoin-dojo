@@ -2,6 +2,7 @@ use std::io::Read;
 
 use crate::transaction::tx_input::TxInput;
 use crate::transaction::tx_output::TxOutput;
+use crate::utils::hash256::hash256;
 use crate::utils::varint::{decode_varint, encode_varint};
 use std::error::Error;
 
@@ -75,5 +76,13 @@ impl Tx {
     {
         let count = decode_varint(reader)? as usize;
         (0..count).map(|_| parser(reader)).collect()
+    }
+
+    pub fn id(&self) -> String {
+        hex::encode(self.hash())
+    }
+
+    fn hash(&self) -> Vec<u8> {
+        hash256(&self.serialize()).to_vec()
     }
 }
